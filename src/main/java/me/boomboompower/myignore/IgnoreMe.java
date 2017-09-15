@@ -20,6 +20,7 @@ package me.boomboompower.myignore;
 import org.apache.commons.io.FileUtils;
 
 import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * IgnoreMe is a simple storage place for player ignores
@@ -37,6 +38,8 @@ public class IgnoreMe {
 
     /**
      * Default constructor for IgnoreMe, can only be called once
+     *
+     * @throws IllegalArgumentException if a new instance is made
      */
     public IgnoreMe() {
         if (hasBeenCreated) {
@@ -47,39 +50,42 @@ public class IgnoreMe {
     }
 
     /**
-     * Gets the players ignore reason
+     * Gets the players ignore reason and returns "No reason"
+     *      if the player could not be found or they aren't ignored
      *
      * @param player Player to check
      * @return the reason the player is ignore, returns <i>Unknown</i>
      *              if no reason was specified
      */
     public String getReason(String player) {
-        return hasReason(player) ? this.playerIgnores.get(player) : "No reason";
-    }
+        if (!isIgnored(player)) return "No reason";
 
-    /**
-     * Checks to see if the player has a reason to be ignored
-     *      returns true if a reason was found
-     *
-     * @param player Player to check
-     * @return true if a reason was found
-     */
-    public boolean hasReason(String player) {
-        return this.playerIgnores.containsValue(player);
+        for (Map.Entry<String, String> all : this.playerIgnores.entrySet()) {
+            if (all.getKey().equalsIgnoreCase(player)) {
+                return all.getValue();
+            }
+        }
+        return "No reason";
     }
 
     /**
      * Checks to see if the given player is already ignored
+     *      (this is not case sensitive)
      *
      * @param player Player to check
      * @return true if the player is ignored
      */
     public boolean isIgnored(String player) {
-        return this.playerIgnores.containsKey(player);
+        for (String all : playerIgnores.keySet()) {
+            if (all.equalsIgnoreCase(player)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
-     * Adds a player to the ignore list
+     * Adds a player to the ignore list by using {@link #addPlayer(String, String)}
      *
      * @param player Player to add
      */
@@ -88,11 +94,11 @@ public class IgnoreMe {
     }
 
     /**
-     * Adds a player to the ignore list with
-     *      a reason
+     * Adds a player to the ignore list with the given reason
+     *      then saves once finished
      *
      * @param player Player to add
-     * @param reason Reason they were added
+     * @param reason Reason they are ignored
      */
     public void addPlayer(String player, String reason) {
         if (player == null) {
@@ -105,7 +111,7 @@ public class IgnoreMe {
     }
 
     /**
-     * Removes a player to the ignore list
+     * Removes a player from the ignore list then saves
      *
      * @param player Player to remove
      */
@@ -119,21 +125,43 @@ public class IgnoreMe {
         MyIgnoreMod.getInstance().getConfigLoader().saveIgnoreMe();
     }
 
+    /**
+     * Gets the size of the {@link LinkedHashMap} for looping
+     *
+     * @return size of linked list
+     */
     public int ignoreCount() {
         return this.playerIgnores != null ? this.playerIgnores.size() : 0;
     }
 
+    /**
+     * Duplicates the LinkedHashMap and returns a temporary one
+     *      this is to prevent the {@link LinkedHashMap#clear()} method
+     *
+     * @return a duplicate {@link LinkedHashMap}
+     */
     public LinkedHashMap<String, String> getPlayerIgnores() {
         LinkedHashMap<String, String> tempHash = new LinkedHashMap<>();
         tempHash.putAll(this.playerIgnores);
         return tempHash;
     }
 
+    /**
+     * The current way of setting the {@link LinkedHashMap} playerIgnores variable
+     *
+     * @param in the list to load
+     * @deprecated May be removed in the future
+     */
     @Deprecated
     public void in(LinkedHashMap<String, String> in) {
         this.playerIgnores = in;
     }
 
+    /**
+     * Clears the ignore list & quietly deletes the config file
+     *
+     * @deprecated May be removed in the future
+     */
     @Deprecated
     public void removeAll() {
         this.playerIgnores.clear();

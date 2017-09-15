@@ -19,30 +19,39 @@ package me.boomboompower.myignore;
 
 import me.boomboompower.myignore.commands.CommandIgnore;
 import me.boomboompower.myignore.config.ConfigLoader;
-import me.boomboompower.myignore.listeners.ChatReceived;
-import me.boomboompower.myignore.listeners.ClientConnected;
 import me.boomboompower.myignore.utils.ChatColor;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.command.ICommand;
-import net.minecraft.util.ChatComponentText;
 import net.minecraftforge.client.ClientCommandHandler;
+import net.minecraftforge.client.event.ClientChatReceivedEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.ModMetadata;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPostInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
+import net.minecraftforge.fml.common.eventhandler.EventPriority;
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraftforge.fml.common.network.FMLNetworkEvent;
 
 import java.io.File;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Mod(modid = MyIgnoreMod.MOD_ID, version = MyIgnoreMod.MOD_VERSION, acceptedMinecraftVersions = "*")
 public class MyIgnoreMod {
 
     public static final String MOD_ID = "myignore_boom";
-    public static final String MOD_VERSION = "1.1";
+    public static final String MOD_VERSION = "1.2";
+
+    private static final Pattern chatPattern = Pattern.compile("(?<rank>\\[.+] )?(?<player>\\S{1,16}): (?<message>.*)");
+    private static final Pattern hypixelIgnorePatternSucceed = Pattern.compile("Added (?<player>\\S{1,16}) to your ignore list\\.");
+    private static final Pattern hypixelIgnorePatternFail = Pattern.compile("Can't find a player by the name of '(?<player>\\S{1,16})'");
+
+    private static final Minecraft mc = Minecraft.getMinecraft();
 
     @Mod.Instance
     private static MyIgnoreMod instance;
@@ -76,10 +85,52 @@ public class MyIgnoreMod {
     @Mod.EventHandler
     public void postInit(FMLPostInitializationEvent event) {
         Minecraft.getMinecraft().addScheduledTask(() -> {
-            registerEvents(new ChatReceived(), new ClientConnected());
+            registerEvents(this);
             registerCommands(new CommandIgnore());
         });
     }
+
+    // EVENTS START
+
+    @SubscribeEvent
+    public void onClientConnectToServer(FMLNetworkEvent.ClientConnectedToServerEvent event) {
+        if (!event.isLocal && mc.getCurrentServerData() != null && mc.getCurrentServerData().serverIP.endsWith(".hypixel.net")) {
+            isHypixel = true;
+        }
+    }
+
+    @SubscribeEvent
+    public void onClientDisconnect(FMLNetworkEvent.ClientDisconnectionFromServerEvent event) {
+        isHypixel = false;
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public void onChatReceive(ClientChatReceivedEvent event) {
+        String message = ChatColor.stripColor(event.message.getUnformattedText());
+
+        if (message.isEmpty()) {
+            return;
+        }
+
+        Matcher matcher = chatPattern.matcher(message);
+
+        if (matcher.matches()) {
+            String player = matcher.group("player");
+
+            if (ignoreMe.isIgnored(player)) {
+                event.setCanceled(true);
+            }
+            return;
+        }
+
+        if (hypixelIgnorePatternSucceed.matcher(message).matches() || hypixelIgnorePatternFail.matcher(message).matches()) {
+            event.setCanceled(true);
+        }
+    }
+
+    // EVENTS END
+
+    // OOP START
 
     private void registerEvents(Object... events) {
         Arrays.stream(events).forEach(MinecraftForge.EVENT_BUS::register);
@@ -101,7 +152,5 @@ public class MyIgnoreMod {
         return this.ignoreMe;
     }
 
-    public static void sendMessageToPlayer(String message, Object... replacements) {
-        Minecraft.getMinecraft().thePlayer.addChatComponentMessage(new ChatComponentText(String.format(message, replacements)));
-    }
+    // OOP END
 }

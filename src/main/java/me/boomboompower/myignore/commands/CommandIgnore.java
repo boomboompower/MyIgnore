@@ -147,7 +147,7 @@ public class CommandIgnore implements ICommand {
                         sendMessage("&cUsage: /" + getCommandName() + " why <Player>");
                     } else {
                         if (!MyIgnoreMod.getInstance().getIgnoreMe().isIgnored(args[1])) {
-                            sendMessage("&cYou aren\'t ignoring %s so no reason was found!");
+                            sendMessage("&cYou aren\'t ignoring %s so no reason was found!", args[0]);
                         } else {
                             sendMessage("&c%s is ignored because: &7%s", args[1], MyIgnoreMod.getInstance().getIgnoreMe().getReason(args[1]));
                         }
@@ -155,6 +155,11 @@ public class CommandIgnore implements ICommand {
                     break;
                 case "clear":
                     sendMessage("&aCleared everyone from ignore list!");
+
+                    for (String person : MyIgnoreMod.getInstance().getIgnoreMe().getPlayerIgnores().values()) {
+                        exCommand("/ignore remove " + person);
+                    }
+
                     MyIgnoreMod.getInstance().getIgnoreMe().removeAll();
                 default:
                     sendMessage(getCommandUsage(sender));
@@ -187,7 +192,12 @@ public class CommandIgnore implements ICommand {
     }
 
     private void sendMessage(String message, Object... replacements) {
-        Minecraft.getMinecraft().thePlayer.addChatComponentMessage(new ChatComponentText(ChatColor.translateAlternateColorCodes(String.format(message, replacements))));
+        try {
+            Minecraft.getMinecraft().thePlayer.addChatComponentMessage(new ChatComponentText(ChatColor.translateAlternateColorCodes(String.format(message, replacements))));
+        } catch (Exception ex) {
+            // Fallback for if we forgot the replacement
+            Minecraft.getMinecraft().thePlayer.addChatComponentMessage(new ChatComponentText(ChatColor.translateAlternateColorCodes(message)));
+        }
     }
 
     private void exCommand(String command) {
