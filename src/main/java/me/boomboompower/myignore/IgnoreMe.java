@@ -18,23 +18,28 @@
 package me.boomboompower.myignore;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.logging.log4j.Logger;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * IgnoreMe is a simple storage place for player ignores
  *
  * @author boomboompower
- * @version 1.0
+ * @version 1.2
  */
 public class IgnoreMe {
+
+    /** The fallback ignore message if none is provided */
+    public static final String DEFUALT_MESSAGE = "No reason";
 
     /** Don't want there to be multiple instances */
     private static boolean hasBeenCreated = false;
 
     /** Contains all player ignore values **/
-    private LinkedHashMap<String, String> playerIgnores = new LinkedHashMap<>();
+    private TreeMap<String, String> playerIgnores;
 
     /**
      * Default constructor for IgnoreMe, can only be called once
@@ -50,22 +55,34 @@ public class IgnoreMe {
     }
 
     /**
-     * Gets the players ignore reason and returns "No reason"
+     * Gets the players ignore reason and returns the default ignore message
      *      if the player could not be found or they aren't ignored
      *
      * @param player Player to check
-     * @return the reason the player is ignore, returns <i>Unknown</i>
+     * @return the reason the player is ignore, returns <i>Fallback message</i>
      *              if no reason was specified
      */
     public String getReason(String player) {
-        if (!isIgnored(player)) return "No reason";
+        if (!isIgnored(player)) return DEFUALT_MESSAGE;
 
         for (Map.Entry<String, String> all : this.playerIgnores.entrySet()) {
             if (all.getKey().equalsIgnoreCase(player)) {
                 return all.getValue();
             }
         }
-        return "No reason";
+        return DEFUALT_MESSAGE;
+    }
+
+    public boolean updateReason(String player, String reason) {
+        if (!isIgnored(player)) return false;
+
+        for (Map.Entry<String, String> all : this.playerIgnores.entrySet()) {
+            if (all.getKey().equalsIgnoreCase(player)) {
+                this.playerIgnores.put(all.getKey(), reason);
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -105,7 +122,7 @@ public class IgnoreMe {
             throw new IllegalArgumentException("Player cannot be null!");
         }
 
-        this.playerIgnores.put(player, reason == null ? "No reason" : reason);
+        this.playerIgnores.put(player, reason == null ? DEFUALT_MESSAGE : reason);
 
         MyIgnoreMod.getInstance().getConfigLoader().saveIgnoreMe();
     }
@@ -120,7 +137,17 @@ public class IgnoreMe {
             throw new IllegalArgumentException("Player cannot be null!");
         }
 
-        this.playerIgnores.remove(player);
+        if (this.playerIgnores == null) {
+            log(0, "PlayerIgnores was null so we created a new list");
+            this.playerIgnores = new TreeMap<>();
+        }
+
+        for (String ignores : this.playerIgnores.keySet()) {
+            if (ignores.equalsIgnoreCase(player)) {
+                this.playerIgnores.remove(ignores);
+                break;
+            }
+        }
 
         MyIgnoreMod.getInstance().getConfigLoader().saveIgnoreMe();
     }
@@ -140,10 +167,14 @@ public class IgnoreMe {
      *
      * @return a duplicate {@link LinkedHashMap}
      */
-    public LinkedHashMap<String, String> getPlayerIgnores() {
-        LinkedHashMap<String, String> tempHash = new LinkedHashMap<>();
-        tempHash.putAll(this.playerIgnores);
-        return tempHash;
+    public TreeMap<String, String> getPlayerIgnores() {
+        if (this.playerIgnores != null) {
+            TreeMap<String, String> tempHash = new TreeMap<>();
+            tempHash.putAll(this.playerIgnores);
+            return tempHash;
+        } else {
+            return new TreeMap<>();
+        }
     }
 
     /**
@@ -153,8 +184,12 @@ public class IgnoreMe {
      * @deprecated May be removed in the future
      */
     @Deprecated
-    public void in(LinkedHashMap<String, String> in) {
-        this.playerIgnores = in;
+    public void in(TreeMap<String, String> in) {
+        if (this.playerIgnores == null) {
+            this.playerIgnores = in;
+        } else {
+            log(1, "Something attempted to load a new config however one is already loaded. Ignoring the attempted changes.");
+        }
     }
 
     /**
@@ -164,8 +199,31 @@ public class IgnoreMe {
      */
     @Deprecated
     public void removeAll() {
+        if (this.playerIgnores == null || this.playerIgnores.isEmpty()) return;
+
         this.playerIgnores.clear();
 
         FileUtils.deleteQuietly(MyIgnoreMod.getInstance().getConfigLoader().getIgnoreMeFile());
+    }
+
+    private void log(int type, String message) {
+        Logger logger = MyIgnoreMod.LOGGER;
+
+        switch (type) {
+            case -2:
+                logger.fatal(message);
+                break;
+            case -1:
+                logger.error(message);
+                break;
+            case 0:
+                logger.info(message);
+                break;
+            case 1:
+                logger.warn(message);
+                break;
+            case 2:
+                logger.debug(message);
+        }
     }
 }

@@ -19,7 +19,8 @@ package me.boomboompower.myignore;
 
 import me.boomboompower.myignore.commands.CommandIgnore;
 import me.boomboompower.myignore.config.ConfigLoader;
-import me.boomboompower.myignore.utils.ChatColor;
+import me.boomboompower.myignore.utils.ChatColorLite;
+import me.boomboompower.myignore.utils.ServerType;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.command.ICommand;
@@ -35,7 +36,9 @@ import net.minecraftforge.fml.common.eventhandler.EventPriority;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.network.FMLNetworkEvent;
 
-import java.io.File;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.regex.Matcher;
@@ -44,12 +47,18 @@ import java.util.regex.Pattern;
 @Mod(modid = MyIgnoreMod.MOD_ID, version = MyIgnoreMod.MOD_VERSION, acceptedMinecraftVersions = "*")
 public class MyIgnoreMod {
 
-    public static final String MOD_ID = "myignore_boom";
-    public static final String MOD_VERSION = "1.2";
+    public static final String MOD_ID = "myignore";
+    public static final String MOD_VERSION = "1.3";
+
+    public static final Logger LOGGER = LogManager.getLogger("IgnoreMe");
 
     private static final Pattern chatPattern = Pattern.compile("(?<rank>\\[.+] )?(?<player>\\S{1,16}): (?<message>.*)");
-    private static final Pattern hypixelIgnorePatternSucceed = Pattern.compile("Added (?<player>\\S{1,16}) to your ignore list\\.");
-    private static final Pattern hypixelIgnorePatternFail = Pattern.compile("Can't find a player by the name of '(?<player>\\S{1,16})'");
+
+    private static final Pattern patternHypixelIgnoreAdd = Pattern.compile("Added (?<player>\\S{1,16}) to your ignore list\\.");
+    private static final Pattern patternHypixelIgnoreRemove = Pattern.compile("Removed '(?<player>\\S{1,16})' from your ignore list\\.");
+
+    private static final Pattern patternHypixelIgnoreAddFail = Pattern.compile("You've already ignored that player! /ignore remove Player to unignore them!");
+    private static final Pattern patternHypixelIgnoreRemoveFail = Pattern.compile("You aren't ignoring that player! /ignore add Player to ignore!");
 
     private static final Minecraft mc = Minecraft.getMinecraft();
 
@@ -59,56 +68,58 @@ public class MyIgnoreMod {
     private ConfigLoader configLoader;
     private IgnoreMe ignoreMe;
 
-    public boolean isHypixel;
+    private ServerType serverType = ServerType.UNKNOWN;
 
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {
         ModMetadata data = event.getModMetadata();
         data.authorList = Collections.singletonList("boomboompower");
         data.version = MOD_VERSION;
-        data.credits = ChatColor.translateAlternateColorCodes("Run &9/ignore&r to get started");
+        data.credits = "Thanks to boomboompower for actually updating this!";
         data.name = "MyIgnore";
-        data.description = ChatColor.translateAlternateColorCodes("&bCreated by boomboompower");
+        data.description = ChatColorLite.translateAlternateColorCodes('&', "&7Created by &6boomboompower &f| &7Run &9/ignore&7 to get started");
 
         this.ignoreMe = new IgnoreMe();
-        this.configLoader = new ConfigLoader("mods" + File.separator + "myignore" + File.separator + Minecraft.getMinecraft().getSession().getProfile().getId() + File.separator);
+        this.configLoader = new ConfigLoader("mods/myignore/" + Minecraft.getMinecraft().getSession().getProfile().getId() + "/");
     }
 
     @Mod.EventHandler
     public void init(FMLInitializationEvent event) {
-        Minecraft.getMinecraft().addScheduledTask(() -> {
-            this.configLoader.loadOptions();
-            this.configLoader.loadIgnoreMe();
-        });
+        Minecraft.getMinecraft().addScheduledTask(() -> this.configLoader.loadIgnoreMe());
     }
 
     @Mod.EventHandler
     public void postInit(FMLPostInitializationEvent event) {
-        Minecraft.getMinecraft().addScheduledTask(() -> {
-            registerEvents(this);
-            registerCommands(new CommandIgnore());
-        });
+        registerEvents(this);
+        registerCommands(new CommandIgnore());
     }
 
     // EVENTS START
 
     @SubscribeEvent
     public void onClientConnectToServer(FMLNetworkEvent.ClientConnectedToServerEvent event) {
-        if (!event.isLocal && mc.getCurrentServerData() != null && mc.getCurrentServerData().serverIP.endsWith(".hypixel.net")) {
-            isHypixel = true;
+        if (mc.getCurrentServerData() != null) {
+            String ip = mc.getCurrentServerData().serverIP.toLowerCase();
+            if (ip.endsWith(".hypixel.net")) {
+                this.serverType = ServerType.HYPIXEL;
+            } else if (ip.endsWith(".badlion.net")) {
+                this.serverType = ServerType.BADLION;
+            } else {
+                this.serverType = ServerType.UNKNOWN;
+            }
         }
     }
 
     @SubscribeEvent
     public void onClientDisconnect(FMLNetworkEvent.ClientDisconnectionFromServerEvent event) {
-        isHypixel = false;
+        this.serverType = ServerType.UNKNOWN;
     }
 
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public void onChatReceive(ClientChatReceivedEvent event) {
-        String message = ChatColor.stripColor(event.message.getUnformattedText());
+        String message = ChatColorLite.stripColor(event.message.getUnformattedText());
 
-        if (message.isEmpty()) {
+        if (message.isEmpty() || event.isCanceled()) {
             return;
         }
 
@@ -117,13 +128,17 @@ public class MyIgnoreMod {
         if (matcher.matches()) {
             String player = matcher.group("player");
 
-            if (ignoreMe.isIgnored(player)) {
+            if (this.ignoreMe.isIgnored(player)) {
                 event.setCanceled(true);
             }
             return;
         }
 
-        if (hypixelIgnorePatternSucceed.matcher(message).matches() || hypixelIgnorePatternFail.matcher(message).matches()) {
+        if (this.serverType == ServerType.HYPIXEL && isPickleMessage(message)) {
+            event.setCanceled(true);
+        }
+
+        if (this.serverType == ServerType.BADLION && message.startsWith("You have") && message.endsWith("your ignore list.")) {
             event.setCanceled(true);
         }
     }
@@ -150,6 +165,17 @@ public class MyIgnoreMod {
 
     public IgnoreMe getIgnoreMe() {
         return this.ignoreMe;
+    }
+
+    public ServerType getServerType() {
+        return this.serverType;
+    }
+
+    private boolean isPickleMessage(String input) {
+        return patternHypixelIgnoreAdd.matcher(input).matches() ||
+                patternHypixelIgnoreRemove.matcher(input).matches() ||
+                patternHypixelIgnoreAddFail.matcher(input).matches() ||
+                patternHypixelIgnoreRemoveFail.matcher(input).matches();
     }
 
     // OOP END

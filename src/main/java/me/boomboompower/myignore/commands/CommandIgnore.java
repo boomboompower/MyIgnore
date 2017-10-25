@@ -17,10 +17,13 @@
 
 package me.boomboompower.myignore.commands;
 
+import me.boomboompower.myignore.IgnoreMe;
 import me.boomboompower.myignore.MyIgnoreMod;
-import me.boomboompower.myignore.utils.ChatColor;
+import me.boomboompower.myignore.utils.ChatColorLite;
+import me.boomboompower.myignore.utils.ServerType;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.command.CommandBase;
 import net.minecraft.command.CommandException;
 import net.minecraft.command.ICommand;
 import net.minecraft.command.ICommandSender;
@@ -30,10 +33,14 @@ import net.minecraft.event.HoverEvent;
 import net.minecraft.util.BlockPos;
 import net.minecraft.util.ChatComponentText;
 
-import java.util.List;
+import java.text.Collator;
+import java.util.*;
 
 public class CommandIgnore implements ICommand {
 
+    private static final IgnoreMe ignore = MyIgnoreMod.getInstance().getIgnoreMe();
+    private static final Minecraft mc = Minecraft.getMinecraft();
+    
     @Override
     public String getCommandName() {
         return "ignore";
@@ -41,12 +48,16 @@ public class CommandIgnore implements ICommand {
 
     @Override
     public String getCommandUsage(ICommandSender sender) {
-        return ChatColor.RED + "/" + getCommandName() + " <help, list, add, remove, why>";
+        return ChatColorLite.RED + "Usage: /" + getCommandName() + " " + asArguments(getSubcommannds());
     }
 
     @Override
     public List<String> getCommandAliases() {
-        return null;
+        return new ArrayList<>();
+    }
+
+    public List<String> getSubcommannds() {
+        return Arrays.asList("help", "list", "add", "remove", "why", "edit");
     }
 
     @Override
@@ -56,9 +67,9 @@ public class CommandIgnore implements ICommand {
         } else {
             switch (args[0]) {
                 case "list":
-                    if (MyIgnoreMod.getInstance().getIgnoreMe().ignoreCount() > 0) {
+                    if (ignore.ignoreCount() > 0) {
                         int page = 1;
-                        int pages = (int) Math.ceil((double) MyIgnoreMod.getInstance().getIgnoreMe().ignoreCount() / 7.0);
+                        int pages = (int) Math.ceil((double) ignore.ignoreCount() / 7.0);
 
                         if (args.length > 1) {
                             try {
@@ -69,60 +80,72 @@ public class CommandIgnore implements ICommand {
                         }
 
                         if (page < 1 || page > pages) {
-                            sendMessage(ChatColor.RED + "Invalid page number.");
+                            sendMessage(ChatColorLite.RED + "Invalid page number.");
                         } else {
+                            TreeMap<String, String> list = ignore.getPlayerIgnores();
+
+                            list.entrySet().removeIf(next -> next.getValue().contains("[HIDDEN]"));
+
                             separator();
 
-                            ChatComponentText mainTitle = new ChatComponentText(ChatColor.GOLD + "Ignored Players List " + ChatColor.GRAY
-                                    + "[Page " + page + " of " + pages + "]" + ChatColor.GOLD + ":");
+                            ChatComponentText mainTitle = new ChatComponentText(ChatColorLite.GOLD + "Ignored Players List " + ChatColorLite.GRAY
+                                    + "[Page " + page + " of " + pages + "]" + ChatColorLite.GOLD + ":");
 
-                            ChatComponentText nextPage = new ChatComponentText(ChatColor.AQUA + " " + ChatColor.STRIKETHROUGH + "->");
+                            ChatComponentText nextPage = new ChatComponentText(ChatColorLite.AQUA + " " + ChatColorLite.STRIKETHROUGH + "->");
 
-                            nextPage.getChatStyle().setChatHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new ChatComponentText(ChatColor.AQUA + "Open next page")));
+                            nextPage.getChatStyle().setChatHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new ChatComponentText(ChatColorLite.AQUA + "Open next page")));
                             nextPage.getChatStyle().setChatClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/" + getCommandName() + " list " + (page + 1 + "")));
 
-                            Minecraft.getMinecraft().thePlayer.addChatComponentMessage(mainTitle.appendSibling(nextPage));
+                            if (page < pages) {
+                                mc.thePlayer.addChatComponentMessage(mainTitle.appendSibling(nextPage));
+                            } else {
+                                mc.thePlayer.addChatComponentMessage(mainTitle);
+                            }
 
-                            MyIgnoreMod.getInstance().getIgnoreMe().getPlayerIgnores().entrySet().stream()
+                            list.entrySet().stream()
                                     .skip((page - 1) * 7)
                                     .limit(7)
                                     .forEach(ignore -> {
-                                        ChatComponentText text = new ChatComponentText(ignore.getKey() + ": " + ChatColor.GOLD + ChatColor.translateAlternateColorCodes('&', ignore.getValue()));
-                                        ChatComponentText remove = new ChatComponentText(ChatColor.WHITE + " - " + ChatColor.RED + ChatColor.BOLD.toString() + "\u2717");
+                                        boolean perm = ignore.getValue().contains("[PERM]");
+                                        String value = ChatColorLite.formatUnformat('&', ignore.getValue().replace("[PERM]", "")).isEmpty() ? "No reason" : ChatColorLite.translateAlternateColorCodes('&', ignore.getValue());
 
-                                        remove.getChatStyle().setChatHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new ChatComponentText(ChatColor.RED + "Remove " + ignore.getKey() + " from ignore list")));
+                                        ChatComponentText text = new ChatComponentText(ignore.getKey() + ": " + ChatColorLite.GOLD + value + (!perm ? ChatColorLite.WHITE + " -" : ""));
+
+                                        ChatComponentText remove = new ChatComponentText(ChatColorLite.RED + ChatColorLite.BOLD.toString() + " \u2717");
+
+                                        remove.getChatStyle().setChatHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new ChatComponentText(ChatColorLite.RED + "Remove " + ignore.getKey() + " from ignore list")));
                                         remove.getChatStyle().setChatClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/" + getCommandName() + " remove " + ignore.getKey()));
 
-                                        Minecraft.getMinecraft().thePlayer.addChatComponentMessage(text.appendSibling(remove));
+                                        mc.thePlayer.addChatComponentMessage((!perm ? text.appendSibling(remove) : text));
                                     });
 
                             separator();
                         }
                     } else {
-                        sendMessage(ChatColor.RED + "You haven't ignored anyone yet!");
+                        sendMessage(ChatColorLite.RED + "You haven't ignored anyone yet!");
                     }
                     break;
                 case "add":
                     if (args.length == 1) {
                         sendMessage("&cUsage: /" + getCommandName() + " add <Player>");
                     } else {
-                        if (!MyIgnoreMod.getInstance().getIgnoreMe().isIgnored(args[1])) {
+                        if (!ignore.isIgnored(args[1])) {
                             if (args.length == 2) {
-                                MyIgnoreMod.getInstance().getIgnoreMe().addPlayer(args[1]);
+                                ignore.addPlayer(args[1]);
                                 sendMessage("&aSuccessfully ignored %s", args[1]);
                             } else {
                                 // There is a reason to add them, transfer args to a string
                                 String reason = getArgsAsString(args, 2);
-                                MyIgnoreMod.getInstance().getIgnoreMe().addPlayer(args[1], reason);
+                                ignore.addPlayer(args[1], reason);
                                 sendMessage("&aSuccessfully ignored %s for \"%s\"", args[1], reason);
                             }
                         } else {
-                            sendMessage("&cYou have already ignored %s, run &b/" + getCommandName() + " remove <Player>&c to unignore them!", args[1]);
+                            sendMessage("&cYou have already ignored %s, run &b/" + getCommandName() + " remove Player&c to unignore them!", args[1]);
                         }
                     }
 
-                    if (MyIgnoreMod.getInstance().isHypixel) {
-                        exCommand("/ignore add " + args[1]);
+                    if (MyIgnoreMod.getInstance().getServerType() != ServerType.UNKNOWN) {
+                        exCommand(String.format(MyIgnoreMod.getInstance().getServerType().getAddToIgnoreCommand(), args[1]));
                     }
                     break;
                 case "rem":
@@ -130,37 +153,102 @@ public class CommandIgnore implements ICommand {
                     if (args.length == 1) {
                         sendMessage("&cUsage: /" + getCommandName() + " remove <Player>");
                     } else {
-                        if (!MyIgnoreMod.getInstance().getIgnoreMe().isIgnored(args[1])) {
-                            sendMessage("&cYou aren\'t ignoring %s, run &b/" + getCommandName() + " add <Player>&c to ignore them!", args[1]);
+                        if (!ignore.isIgnored(args[1])) {
+                            sendMessage("&cYou aren\'t ignoring %s, run &b/" + getCommandName() + " add Player&c to ignore them!", args[1]);
+                        } else if (ignore.getReason(args[1]).toUpperCase().endsWith("[PERM]")) {
+                            sendMessage("&cYou cannot unignore that player while they have the permanent attribute.");
                         } else {
-                            MyIgnoreMod.getInstance().getIgnoreMe().remove(args[1]);
+                            ignore.remove(args[1]);
                             sendMessage("&aSuccessfully unignored %s", args[1]);
                         }
                     }
 
-                    if (MyIgnoreMod.getInstance().isHypixel) {
-                        exCommand("/ignore remove " + args[1]);
+                    if (MyIgnoreMod.getInstance().getServerType() != ServerType.UNKNOWN) {
+                        exCommand(String.format(MyIgnoreMod.getInstance().getServerType().getRemoveFromIgnoreCommand(), args[1]));
                     }
                     break;
                 case "why":
                     if (args.length == 1) {
                         sendMessage("&cUsage: /" + getCommandName() + " why <Player>");
                     } else {
-                        if (!MyIgnoreMod.getInstance().getIgnoreMe().isIgnored(args[1])) {
-                            sendMessage("&cYou aren\'t ignoring %s so no reason was found!", args[0]);
+                        if (!ignore.isIgnored(args[1])) {
+                            sendMessage("&cNo ignore reason was found for " + args[1]);
                         } else {
-                            sendMessage("&c%s is ignored because: &7%s", args[1], MyIgnoreMod.getInstance().getIgnoreMe().getReason(args[1]));
+                            if (ignore.getReason(args[1]).equals(IgnoreMe.DEFUALT_MESSAGE)) {
+                                sendMessage("&7%s&c does not have an ignore reason.", args[1]);
+                            } else {
+                                sendMessage("&cThe current ignore reason for &7%s&c is &7%s", args[1], ignore.getReason(args[1]));
+                            }
+                        }
+                    }
+                    break;
+                case "edit":
+                    if (args.length == 1) {
+                        sendMessage("&cUsage: /" + getCommandName() + " edit <Player> <Reason>");
+                    } else {
+                        if (!ignore.isIgnored(args[1])) {
+                            sendMessage("&7%s&c is not currently ignored!", args[1]);
+                        } else {
+                            if (args.length > 2) {
+                                String reason = getArgsAsString(args, 2);
+                                if (ignore.updateReason(args[1], reason)) {
+                                    sendMessage("&aSuccessfully updated %s%s ignore reason to \"%s\"", args[1], (args[1].endsWith("s") ? "\'" : "\'s"), reason);
+                                } else {
+                                    sendMessage("&cFailed to update %s%s ignore reason!", args[1], (args[1].endsWith("s")));
+                                }
+                            } else {
+                                sendMessage("&cUsage: /" + getCommandName() + " edit <Player> <Reason>");
+                            }
                         }
                     }
                     break;
                 case "clear":
                     sendMessage("&aCleared everyone from ignore list!");
 
-                    for (String person : MyIgnoreMod.getInstance().getIgnoreMe().getPlayerIgnores().values()) {
-                        exCommand("/ignore remove " + person);
+                    if (args.length > 1 && MyIgnoreMod.getInstance().getServerType() != ServerType.UNKNOWN && args[1].equalsIgnoreCase("global")) {
+                        for (String person : ignore.getPlayerIgnores().values()) {
+                            exCommand(String.format(MyIgnoreMod.getInstance().getServerType().getRemoveFromIgnoreCommand(), person));
+                        }
                     }
 
-                    MyIgnoreMod.getInstance().getIgnoreMe().removeAll();
+                    ignore.removeAll();
+                    break;
+//                case "cmd_debug_2017":
+//                    if (args.length >= 2) {
+//                        if (args[1].equalsIgnoreCase("protocol_keem();")) {
+//                            try {
+//                                ClientCommandHandler handler = ClientCommandHandler.instance;
+//                                Set<ICommand> set = ReflectionHelper.getPrivateValue(CommandHandler.class, handler, "commandSet");
+//                                Map<String, ICommand> map = ReflectionHelper.getPrivateValue(CommandHandler.class, handler, "commandMap");
+//                                for (ICommand command : set) {
+//                                    if (command.getCommandName().equalsIgnoreCase(getCommandName())) {
+//                                        set.remove(command);
+//                                        break;
+//                                    }
+//                                }
+//                                for (String command : map.keySet()) {
+//                                    if (command.equalsIgnoreCase(getCommandName())) {
+//                                        map.remove(command);
+//                                        break;
+//                                    }
+//                                }
+//                                ReflectionHelper.setPrivateValue(CommandHandler.class, handler, set, "commandSet");
+//                                ReflectionHelper.setPrivateValue(CommandHandler.class, handler, map, "commandMap");
+//                                sendMessage("&aProtocol keem successfully executed");
+//                            } catch (Exception ex) {
+//                                sendMessage("&cProtocol keem was unsuccessfull");
+//                            }
+//                            break;
+//                        } else if (args[1].equalsIgnoreCase("protocol_react();")) {
+//                            try {
+//                                MinecraftForge.EVENT_BUS.unregister(MyIgnoreMod.getInstance());
+//                                sendMessage("&aProtocol react successfully executed");
+//                            } catch (Exception ex) {
+//                                sendMessage("&cProtocol react was unsuccessfull");
+//                            }
+//                            break;
+//                        }
+//                    }
                 default:
                     sendMessage(getCommandUsage(sender));
             }
@@ -174,12 +262,27 @@ public class CommandIgnore implements ICommand {
 
     @Override
     public List<String> addTabCompletionOptions(ICommandSender sender, String[] args, BlockPos pos) {
+        if (args.length == 1) {
+            return CommandBase.getListOfStringsMatchingLastWord(args, getSubcommannds());
+        } else if (args.length == 2) {
+            switch (args[0]) {
+                case "add":
+                    return CommandBase.getListOfStringsMatchingLastWord(args, getPlayerNames());
+                case "rem":
+                case "why":
+                case "edit":
+                case "remove":
+                    return CommandBase.getListOfStringsMatchingLastWord(args, ignore.getPlayerIgnores().keySet());
+                case "list":
+                    return CommandBase.getListOfStringsMatchingLastWord(args, getPageCount());
+            }
+        }
         return null;
     }
 
     @Override
     public boolean isUsernameIndex(String[] args, int index) {
-        return false;
+        return args.length > 0 && args[0].equalsIgnoreCase("add");
     }
 
     @Override
@@ -193,15 +296,19 @@ public class CommandIgnore implements ICommand {
 
     private void sendMessage(String message, Object... replacements) {
         try {
-            Minecraft.getMinecraft().thePlayer.addChatComponentMessage(new ChatComponentText(ChatColor.translateAlternateColorCodes(String.format(message, replacements))));
+            mc.thePlayer.addChatComponentMessage(new ChatComponentText(ChatColorLite.translateAlternateColorCodes('&', String.format(message, replacements))));
         } catch (Exception ex) {
-            // Fallback for if we forgot the replacement
-            Minecraft.getMinecraft().thePlayer.addChatComponentMessage(new ChatComponentText(ChatColor.translateAlternateColorCodes(message)));
+            try {
+                // Fallback for if we forgot the replacement
+                mc.thePlayer.addChatComponentMessage(new ChatComponentText(ChatColorLite.translateAlternateColorCodes('&', message)));
+            } catch (Exception ex1) {
+                MyIgnoreMod.LOGGER.error("Failed to send the player a chat message", ex1);
+            }
         }
     }
 
     private void exCommand(String command) {
-        Minecraft.getMinecraft().thePlayer.sendChatMessage(command);
+        mc.thePlayer.sendChatMessage(command);
     }
 
     private String getArgsAsString(String[] args, int startpos) {
@@ -210,5 +317,54 @@ public class CommandIgnore implements ICommand {
             builder.append(args[i]).append(" ");
         }
         return builder.toString().trim();
+    }
+
+    private String asArguments(List<String> input) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("<");
+        Iterator<String> iterator = input.iterator();
+        while (iterator.hasNext()) {
+            String next = iterator.next();
+            builder.append(next);
+            if (iterator.hasNext()) {
+                builder.append(", ");
+            }
+        }
+        return builder.append(">").toString().trim();
+    }
+
+    private boolean isOne(String input, String... choices) {
+        for (String s : choices) {
+            if (s.equalsIgnoreCase(input)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private List<String> getPlayerNames() {
+        if (mc.theWorld == null) {
+            return new ArrayList<>();
+        } else {
+            List<String> names = new ArrayList<>();
+            for (EntityPlayer player : mc.theWorld.playerEntities) {
+                if (!mc.thePlayer.equals(player)) {
+                    names.add(player.getName());
+                }
+            }
+            names.sort(Collator.getInstance());
+
+            return names;
+        }
+    }
+
+    private List<String> getPageCount() {
+        if (ignore.getPlayerIgnores().isEmpty()) return new ArrayList<>();
+
+        List<String> list = new ArrayList<>();
+        for (int i = 1; i <= (int) Math.ceil((double) ignore.ignoreCount() / 7.0); i++) {
+            list.add(i + "");
+        }
+        return list;
     }
 }
