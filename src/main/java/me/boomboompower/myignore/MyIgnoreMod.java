@@ -102,6 +102,8 @@ public class MyIgnoreMod {
                 this.serverType = ServerType.HYPIXEL;
             } else if (ip.endsWith(".badlion.net")) {
                 this.serverType = ServerType.BADLION;
+            } else if (ip.endsWith(".opiamc.net")) {
+                this.serverType = ServerType.OPIA;
             } else {
                 this.serverType = ServerType.UNKNOWN;
             }
