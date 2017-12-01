@@ -48,11 +48,9 @@ import java.util.regex.Pattern;
 public class MyIgnoreMod {
 
     public static final String MOD_ID = "myignore";
-    public static final String MOD_VERSION = "1.3";
+    public static final String MOD_VERSION = "1.4";
 
     public static final Logger LOGGER = LogManager.getLogger("IgnoreMe");
-
-    private static final Pattern chatPattern = Pattern.compile("(?<rank>\\[.+] )?(?<player>\\S{1,16}): (?<message>.*)");
 
     private static final Pattern patternHypixelIgnoreAdd = Pattern.compile("Added (?<player>\\S{1,16}) to your ignore list\\.");
     private static final Pattern patternHypixelIgnoreRemove = Pattern.compile("Removed '(?<player>\\S{1,16})' from your ignore list\\.");
@@ -123,7 +121,7 @@ public class MyIgnoreMod {
             return;
         }
 
-        Matcher matcher = chatPattern.matcher(message);
+        Matcher matcher = this.serverType.getIgnorePattern().matcher(message);
 
         if (matcher.matches()) {
             String player = matcher.group("player");

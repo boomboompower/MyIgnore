@@ -23,15 +23,14 @@ import me.boomboompower.myignore.utils.ChatColorLite;
 import me.boomboompower.myignore.utils.ServerType;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.command.CommandBase;
-import net.minecraft.command.CommandException;
-import net.minecraft.command.ICommand;
-import net.minecraft.command.ICommandSender;
+import net.minecraft.command.*;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.event.ClickEvent;
 import net.minecraft.event.HoverEvent;
 import net.minecraft.util.BlockPos;
 import net.minecraft.util.ChatComponentText;
+import net.minecraftforge.client.ClientCommandHandler;
+import net.minecraftforge.fml.relauncher.ReflectionHelper;
 
 import java.text.Collator;
 import java.util.*;
@@ -127,7 +126,7 @@ public class CommandIgnore implements ICommand {
                     break;
                 case "add":
                     if (args.length == 1) {
-                        sendMessage("&cUsage: /" + getCommandName() + " add <Player>");
+                        sendMessage("&cUsage: /" + getCommandName() + " add " + asArguments(Collections.singletonList("Player")));
                     } else {
                         if (!ignore.isIgnored(args[1])) {
                             if (args.length == 2) {
@@ -139,19 +138,19 @@ public class CommandIgnore implements ICommand {
                                 ignore.addPlayer(args[1], reason);
                                 sendMessage("&aSuccessfully ignored %s for \"%s\"", args[1], reason);
                             }
+
+                            if (MyIgnoreMod.getInstance().getServerType() != ServerType.UNKNOWN && args.length > 2 && args[2].equalsIgnoreCase("-server")) {
+                                exCommand(String.format(MyIgnoreMod.getInstance().getServerType().getAddToIgnoreCommand(), args[1]));
+                            }
                         } else {
                             sendMessage("&cYou have already ignored %s, run &b/" + getCommandName() + " remove Player&c to unignore them!", args[1]);
                         }
-                    }
-
-                    if (MyIgnoreMod.getInstance().getServerType() != ServerType.UNKNOWN) {
-                        exCommand(String.format(MyIgnoreMod.getInstance().getServerType().getAddToIgnoreCommand(), args[1]));
                     }
                     break;
                 case "rem":
                 case "remove":
                     if (args.length == 1) {
-                        sendMessage("&cUsage: /" + getCommandName() + " remove <Player>");
+                        sendMessage("&cUsage: /" + getCommandName() + " remove " + asArguments(Collections.singletonList("Player")));
                     } else {
                         if (!ignore.isIgnored(args[1])) {
                             sendMessage("&cYou aren\'t ignoring %s, run &b/" + getCommandName() + " add Player&c to ignore them!", args[1]);
@@ -160,16 +159,16 @@ public class CommandIgnore implements ICommand {
                         } else {
                             ignore.remove(args[1]);
                             sendMessage("&aSuccessfully unignored %s", args[1]);
-                        }
-                    }
 
-                    if (MyIgnoreMod.getInstance().getServerType() != ServerType.UNKNOWN) {
-                        exCommand(String.format(MyIgnoreMod.getInstance().getServerType().getRemoveFromIgnoreCommand(), args[1]));
+                            if (MyIgnoreMod.getInstance().getServerType() != ServerType.UNKNOWN && args.length > 2 && args[2].equalsIgnoreCase("-server")) {
+                                exCommand(String.format(MyIgnoreMod.getInstance().getServerType().getRemoveFromIgnoreCommand(), args[1]));
+                            }
+                        }
                     }
                     break;
                 case "why":
                     if (args.length == 1) {
-                        sendMessage("&cUsage: /" + getCommandName() + " why <Player>");
+                        sendMessage("&cUsage: /" + getCommandName() + " why " + asArguments(Collections.singletonList("Player")));
                     } else {
                         if (!ignore.isIgnored(args[1])) {
                             sendMessage("&cNo ignore reason was found for " + args[1]);
@@ -184,7 +183,7 @@ public class CommandIgnore implements ICommand {
                     break;
                 case "edit":
                     if (args.length == 1) {
-                        sendMessage("&cUsage: /" + getCommandName() + " edit <Player> <Reason>");
+                        sendMessage("&cUsage: /" + getCommandName() + " edit " + asArguments(Collections.singletonList("Player")) + " " + asArguments(Collections.singletonList("Reason")));
                     } else {
                         if (!ignore.isIgnored(args[1])) {
                             sendMessage("&7%s&c is not currently ignored!", args[1]);
@@ -197,7 +196,7 @@ public class CommandIgnore implements ICommand {
                                     sendMessage("&cFailed to update %s%s ignore reason!", args[1], (args[1].endsWith("s")));
                                 }
                             } else {
-                                sendMessage("&cUsage: /" + getCommandName() + " edit <Player> <Reason>");
+                                sendMessage("&cUsage: /" + getCommandName() + " edit " + asArguments(Collections.singletonList("Player")) + " " + asArguments(Collections.singletonList("Reason")));
                             }
                         }
                     }
@@ -205,7 +204,7 @@ public class CommandIgnore implements ICommand {
                 case "clear":
                     sendMessage("&aCleared everyone from ignore list!");
 
-                    if (args.length > 1 && MyIgnoreMod.getInstance().getServerType() != ServerType.UNKNOWN && args[1].equalsIgnoreCase("global")) {
+                    if (args.length > 1 && MyIgnoreMod.getInstance().getServerType() != ServerType.UNKNOWN && args[1].equalsIgnoreCase("-server")) {
                         for (String person : ignore.getPlayerIgnores().values()) {
                             exCommand(String.format(MyIgnoreMod.getInstance().getServerType().getRemoveFromIgnoreCommand(), person));
                         }
@@ -213,42 +212,32 @@ public class CommandIgnore implements ICommand {
 
                     ignore.removeAll();
                     break;
-//                case "cmd_debug_2017":
-//                    if (args.length >= 2) {
-//                        if (args[1].equalsIgnoreCase("protocol_keem();")) {
-//                            try {
-//                                ClientCommandHandler handler = ClientCommandHandler.instance;
-//                                Set<ICommand> set = ReflectionHelper.getPrivateValue(CommandHandler.class, handler, "commandSet");
-//                                Map<String, ICommand> map = ReflectionHelper.getPrivateValue(CommandHandler.class, handler, "commandMap");
-//                                for (ICommand command : set) {
-//                                    if (command.getCommandName().equalsIgnoreCase(getCommandName())) {
-//                                        set.remove(command);
-//                                        break;
-//                                    }
-//                                }
-//                                for (String command : map.keySet()) {
-//                                    if (command.equalsIgnoreCase(getCommandName())) {
-//                                        map.remove(command);
-//                                        break;
-//                                    }
-//                                }
-//                                ReflectionHelper.setPrivateValue(CommandHandler.class, handler, set, "commandSet");
-//                                ReflectionHelper.setPrivateValue(CommandHandler.class, handler, map, "commandMap");
-//                                sendMessage("&aProtocol keem successfully executed");
-//                            } catch (Exception ex) {
-//                                sendMessage("&cProtocol keem was unsuccessfull");
-//                            }
-//                            break;
-//                        } else if (args[1].equalsIgnoreCase("protocol_react();")) {
-//                            try {
-//                                MinecraftForge.EVENT_BUS.unregister(MyIgnoreMod.getInstance());
-//                                sendMessage("&aProtocol react successfully executed");
-//                            } catch (Exception ex) {
-//                                sendMessage("&cProtocol react was unsuccessfull");
-//                            }
-//                            break;
-//                        }
-//                    }
+                case "unregistercommand":
+                    if (args.length > 1 && args[1].equalsIgnoreCase("--confirm")) {
+                        try {
+                            ClientCommandHandler handler = ClientCommandHandler.instance;
+                            Set<ICommand> set = ReflectionHelper.getPrivateValue(CommandHandler.class, handler, "commandSet");
+                            Map<String, ICommand> map = ReflectionHelper.getPrivateValue(CommandHandler.class, handler, "commandMap");
+                            for (ICommand command : set) {
+                                if (command.getCommandName().equalsIgnoreCase(getCommandName())) {
+                                    set.remove(command);
+                                    break;
+                                }
+                            }
+                            for (String command : map.keySet()) {
+                                if (command.equalsIgnoreCase(getCommandName())) {
+                                    map.remove(command);
+                                    break;
+                                }
+                            }
+                            ReflectionHelper.setPrivateValue(CommandHandler.class, handler, set, "commandSet");
+                            ReflectionHelper.setPrivateValue(CommandHandler.class, handler, map, "commandMap");
+                            sendMessage("&aCommand removal successfully executed");
+                        } catch (Exception ex) {
+                            sendMessage("&cCommand removal was unsuccessful");
+                        }
+                        break;
+                    }
                 default:
                     sendMessage(getCommandUsage(sender));
             }
